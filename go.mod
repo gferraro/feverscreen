@@ -18,6 +18,7 @@ require (
 	github.com/TheCacophonyProject/rtc-utils v1.3.0
 	github.com/TheCacophonyProject/window v0.0.0-20200312071457-7fc8799fdce7
 	github.com/alexflint/go-arg v1.3.0
+	github.com/alexkohler/nakedret v1.0.0 // indirect
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/gobuffalo/envy v1.9.0 // indirect
@@ -26,9 +27,12 @@ require (
 	github.com/godbus/dbus v4.1.0+incompatible
 	github.com/gorilla/mux v1.7.4
 	github.com/juju/ratelimit v1.0.1
+	github.com/mdempsky/maligned v0.0.0-20180708014732-6e39bd26a8c8 // indirect
+	github.com/mibk/dupl v1.0.0 // indirect
 	github.com/mitchellh/mapstructure v1.2.2 // indirect
+	github.com/opennota/check v0.0.0-20180911053232-0c771f5545ff // indirect
 	github.com/pelletier/go-toml v1.6.0 // indirect
-	github.com/rogpeppe/go-internal v1.5.2 // indirect
+	github.com/securego/gosec v0.0.0-20200401082031-e946c8c39989 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
@@ -39,5 +43,6 @@ require (
 	gopkg.in/ini.v1 v1.55.0 // indirect
 	gopkg.in/yaml.v1 v1.0.0-20140924161607-9f9df34309c0
 	gopkg.in/yaml.v2 v2.2.8
+	mvdan.cc/unparam v0.0.0-20200501210554-b37ab49443f7 // indirect
 	periph.io/x/periph v3.6.2+incompatible
 )

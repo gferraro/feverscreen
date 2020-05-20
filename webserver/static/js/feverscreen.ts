@@ -5,9 +5,11 @@ import {CalibrationInfo, FrameInfo, Modes, NetworkInterface, TemperatureSource} 
 import {circleDetect, circleDetectRadius, edgeDetect} from "./circledetect.js";
 import {buildSAT, scanHaar, ConvertCascadeXML, HaarCascade} from "./haarcascade.js";
 import {detectForehead} from "./forehead-detect.js";
+import {Face} from "./tracking.js";
 
 let GForeheads: ROIFeature[];
 let GROI: ROIFeature[] = [];
+let GFaces: Face[] = [];
 
 
 const ForeheadColour = "#00ff00";
@@ -1227,6 +1229,7 @@ window.onload = async function() {
       roi = roi.concat(roiScan);
     }
 
+
     roi = detectThermalReference(
       roi,
       saltPepperData,
@@ -1234,6 +1237,8 @@ window.onload = async function() {
       width,
       height
     );
+
+
     GForeheads = [];
     for (let i = 0; i < roi.length; i++) {
       if (roi[i].flavor != "Circle") {
