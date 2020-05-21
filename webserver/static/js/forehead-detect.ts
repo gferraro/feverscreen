@@ -1,4 +1,6 @@
 import { ROIFeature, FeatureState } from "./processing.js";
+import { Face } from "./tracking.js";
+
 // top percent to be considered forehead
 const ForeheadPercent = 0.3;
 const ForeheadPadding = 2;
@@ -95,17 +97,14 @@ function featureLine(x: number, y: number): ROIFeature {
 function detectYEdge(
   faceY: ROIFeature,
   y: number,
-  midY: number,
   intensity: number,
   direction: number
 ) {
   if (intensity - ForeheadEdgeThresh < 0) {
     return false;
   }
-
-  if (y < midY) {
+  if (faceY.state == FeatureState.None || faceY.state == FeatureState.TopEdge) {
     if (
-      faceY.state == FeatureState.Inside ||
       (direction > -Math.PI / 4 - 0.5 && direction < Math.PI / 4 - 0.5)
     ) {
       return false;
@@ -139,7 +138,7 @@ function detectYEdge(
 }
 
 function nextYState(r: ROIFeature, edge: boolean) {
-  if (r.state == FeatureState.Outside && edge) {
+  if (r.state == FeatureState.None && edge) {
     r.state = FeatureState.TopEdge;
   } else if (r.state == FeatureState.TopEdge && !edge) {
     r.state = FeatureState.Inside;
@@ -175,6 +174,7 @@ function yScan(
 
   for (let x = ~~faceX.x0 + 1; x < ~~faceX.x1 - 1; x++) {
     let faceY = featureLine(x, -1);
+    faceY.state = FeatureState.None
     for (let y = ~~roi.y0 + 1; y < endY; y++) {
       let index = y * frameWidth + x;
       let [intensity, direction] = sobelEdge(source, index, frameWidth);
@@ -182,7 +182,7 @@ function yScan(
         // end any previous state
         nextYState(faceY, false);
       }
-      let edge = detectYEdge(faceY, y, midY, intensity, direction);
+      let edge = detectYEdge(faceY, y, intensity, direction);
       nextYState(faceY, edge);
     }
 
@@ -194,7 +194,7 @@ function yScan(
 }
 
 function nextXState(r: ROIFeature, edge: boolean) {
-  if (r.state == FeatureState.Outside && edge) {
+  if (r.state == FeatureState.None && edge) {
     r.state = FeatureState.LeftEdge;
   } else if (r.state == FeatureState.LeftEdge && !edge) {
     r.state = FeatureState.Inside;
@@ -219,9 +219,8 @@ function detectXEdge(
   if (intensity - ForeheadEdgeThresh < 0) {
     return false;
   }
-  if (x < midX) {
+  if (faceX.state == FeatureState.None ||  faceX.state == FeatureState.LeftEdge) {
     if (
-      FeatureState.Inside == faceX.state ||
       direction < -0.5 ||
       direction > Math.PI / 2 + 0.5
     ) {
@@ -229,7 +228,7 @@ function detectXEdge(
     }
 
     // get strong gradient of left most edge
-    if (faceX.state == FeatureState.Outside) {
+    if (faceX.state == FeatureState.None) {
       faceX.x0 = x;
       faceX.sensorX = intensity;
     } else if (faceX.onEdge() && intensity > faceX.sensorX) {
@@ -270,11 +269,12 @@ function xScan(
   const midX = ~~roi.midX();
   for (let y = ~~faceY.y0 + 1; y < ~~faceY.y1 - 1; y++) {
     let faceX = featureLine(-1, y);
+    faceX.state = FeatureState.None;
     for (let x = ~~roi.x0 + 1; x < ~~roi.x1 - 1; x++) {
-      if (x == midX) {
+      // if (x == midX) {
         // end any previous edges
-        nextXState(faceX, false);
-      }
+        // nextXState(faceX, false);
+      // }
       let index = y * frameWidth + x;
       let [intensity, diretion] = sobelEdge(source, index, frameWidth);
       let edgeDetected = detectXEdge(faceX, x, midX, intensity, diretion);
@@ -303,6 +303,44 @@ function xScan(
   return [longestLine, null];
 }
 
+
+// scan the haar detected rectangle along y axis, to find range of x values,
+// then along the x axis to find the range of y values
+// choose the biggest x and y value to define xRad and yRad of the head
+export function detectMovingForehead(
+  roi: ROIFeature,
+  source: Float32Array,
+  frameWidth: number,
+  frameHeight: number
+): Face  | null {
+  frameWidth = frameWidth;
+  frameHeight = frameHeight;
+  roi.x0 = roi.x0 -5;
+  roi.x1 = roi.x1 +5;
+  roi.y0 = roi.y0 -5;
+  roi.y1 = roi.y1 +5;
+
+  let [faceX, endY] = xScan(source, roi, roi);
+  if (!faceX) {
+    faceX = roi;
+  }
+  let faceY = yScan(source, faceX, roi, endY);
+  if (!faceY) {
+    return  null;
+  }
+  faceY.x0 = faceX.x0
+  faceY.x1 = faceX.x1
+
+  let forehead = new ROIFeature();
+  forehead.y0 = faceY.y0 - ForeheadPadding;
+  forehead.y1 = faceY.y0 + faceY.height() * ForeheadPercent + ForeheadPadding;
+  forehead.x0 = faceX.x0 - ForeheadPadding;
+  forehead.x1 = faceX.x1 + ForeheadPadding;
+  const face = new Face(faceY,forehead,0)
+
+  return face;
+}
+
 // scan the haar detected rectangle along y axis, to find range of x values,
 // then along the x axis to find the range of y values
 // choose the biggest x and y value to define xRad and yRad of the head
@@ -311,7 +349,7 @@ export function detectForehead(
   source: Float32Array,
   frameWidth: number,
   frameHeight: number
-): ROIFeature | null {
+): Face  | null {
   frameWidth = frameWidth;
   frameHeight = frameHeight;
   let [faceX, endY] = xScan(source, roi, roi);
@@ -320,13 +358,17 @@ export function detectForehead(
   }
   let faceY = yScan(source, faceX, roi, endY);
   if (!faceY) {
-    return null;
+    return  null;
   }
+  faceY.x0 = faceX.x0
+  faceY.x1 = faceX.x1
 
   let forehead = new ROIFeature();
   forehead.y0 = faceY.y0 - ForeheadPadding;
   forehead.y1 = faceY.y0 + faceY.height() * ForeheadPercent + ForeheadPadding;
   forehead.x0 = faceX.x0 - ForeheadPadding;
   forehead.x1 = faceX.x1 + ForeheadPadding;
-  return forehead;
+  const face = new Face(faceY,forehead,0)
+
+  return face;
 }

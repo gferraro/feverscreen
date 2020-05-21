@@ -79,6 +79,10 @@ export class ROIFeature {
   height() {
     return this.y1 - this.y0;
   }
+  overlapR(other:ROIFeature) {
+    return this.overlap(other.x0,other.y0,other.x1,other.y1)
+  
+  }
 
   overlap(x0: number, y0: number, x1: number, y1: number) {
     if (x1 <= this.x0) {

@@ -1,16 +1,36 @@
-import {BlobReader} from "./utils.js";
-import {fahrenheitToCelsius, moduleTemperatureAnomaly, sensorAnomaly, ROIFeature} from "./processing.js";
-import {DeviceApi} from "./api.js";
-import {CalibrationInfo, FrameInfo, Modes, NetworkInterface, TemperatureSource} from "./feverscreen-types.js";
-import {circleDetect, circleDetectRadius, edgeDetect} from "./circledetect.js";
-import {buildSAT, scanHaar, ConvertCascadeXML, HaarCascade} from "./haarcascade.js";
-import {detectForehead} from "./forehead-detect.js";
-import {Face} from "./tracking.js";
+import { BlobReader } from "./utils.js";
+import {
+  fahrenheitToCelsius,
+  moduleTemperatureAnomaly,
+  sensorAnomaly,
+  ROIFeature
+} from "./processing.js";
+import { DeviceApi } from "./api.js";
+import {
+  CalibrationInfo,
+  FrameInfo,
+  Modes,
+  NetworkInterface,
+  TemperatureSource
+} from "./feverscreen-types.js";
+import {
+  circleDetect,
+  circleDetectRadius,
+  edgeDetect
+} from "./circledetect.js";
+import {
+  buildSAT,
+  scanHaar,
+  ConvertCascadeXML,
+  HaarCascade
+} from "./haarcascade.js";
+import { detectForehead, detectMovingForehead } from "./forehead-detect.js";
+import { Face, trackFaces } from "./tracking.js";
 
 let GForeheads: ROIFeature[];
 let GROI: ROIFeature[] = [];
 let GFaces: Face[] = [];
-
+let frame = 0;
 
 const ForeheadColour = "#00ff00";
 
@@ -110,7 +130,7 @@ const populateVersionInfo = async (element: HTMLDivElement) => {
 type BoxOffset = "left" | "right" | "top" | "bottom";
 type FovBox = Record<BoxOffset, number>;
 
-let GCascadeFace : HaarCascade | null =null;
+let GCascadeFace: HaarCascade | null = null;
 function LoadCascadeXML() {
   // XML files from :
   //  * https://www.researchgate.net/publication/317013979_Face_Detection_on_Infrared_Thermal_Image
@@ -906,7 +926,11 @@ window.onload = async function() {
     return dest;
   }
 
-  function mip_scale_down(source: Float32Array, width: number, height: number): Float32Array {
+  function mip_scale_down(
+    source: Float32Array,
+    width: number,
+    height: number
+  ): Float32Array {
     const ww = Math.floor(width / 2);
     const hh = Math.floor(height / 2);
     const dest = new Float32Array(ww * hh);
@@ -1108,7 +1132,6 @@ window.onload = async function() {
     return false;
   }
 
-
   function insertThermalReference(roi: ROIFeature[], r: ROIFeature) {
     let bestX = r.midX();
     let bestY = r.midY();
@@ -1136,8 +1159,18 @@ window.onload = async function() {
     let cy = 0;
     let radius = (r.x1 - r.x0) * 0.5;
 
-    [value, cx, cy] = circleDetectRadius(edgeData, dest, radius, width, height, r.midX() - radius * 2, r.midY() - radius * 2, r.midX() + radius * 2, r.midY() + radius * 2);
-    if(!r.contains(cx, cy)) {
+    [value, cx, cy] = circleDetectRadius(
+      edgeData,
+      dest,
+      radius,
+      width,
+      height,
+      r.midX() - radius * 2,
+      r.midY() - radius * 2,
+      r.midX() + radius * 2,
+      r.midY() + radius * 2
+    );
+    if (!r.contains(cx, cy)) {
       return false;
     }
     let sensorValue = extractSensorValue(
@@ -1150,8 +1183,14 @@ window.onload = async function() {
     return true;
   }
 
-  function detectThermalReference(roi : ROIFeature[], saltPepperData: Float32Array, smoothedData: Float32Array, width : number, height : number) {
- //   const edgeData = edgeDetect(saltPepperData, frameWidth, frameHeight);
+  function detectThermalReference(
+    roi: ROIFeature[],
+    saltPepperData: Float32Array,
+    smoothedData: Float32Array,
+    width: number,
+    height: number
+  ) {
+    //   const edgeData = edgeDetect(saltPepperData, frameWidth, frameHeight);
     const edgeData = edgeDetect(smoothedData, frameWidth, frameHeight);
 
     if (GROI.length > 0) {
@@ -1167,7 +1206,11 @@ window.onload = async function() {
     let bestRadius;
     let bestX;
     let bestY;
-    [circle_image, bestRadius, bestX, bestY] = circleDetect(edgeData, frameWidth, frameHeight);
+    [circle_image, bestRadius, bestX, bestY] = circleDetect(
+      edgeData,
+      frameWidth,
+      frameHeight
+    );
 
     if (bestRadius <= 0) {
       return roi;
@@ -1215,6 +1258,7 @@ window.onload = async function() {
   }
 
   function featureDetect(
+    timeOn: number,
     saltPepperData: Float32Array,
     smoothedData: Float32Array,
     width: number,
@@ -1229,7 +1273,6 @@ window.onload = async function() {
       roi = roi.concat(roiScan);
     }
 
-
     roi = detectThermalReference(
       roi,
       saltPepperData,
@@ -1237,24 +1280,85 @@ window.onload = async function() {
       width,
       height
     );
+    frame += 1;
 
+    // const newFaces = roi.filter(roi => roi.flavor !="Circle");
 
     GForeheads = [];
-    for (let i = 0; i < roi.length; i++) {
-      if (roi[i].flavor != "Circle") {
-        let forehead = detectForehead(roi[i], smoothedData, frameWidth, frameHeight);
-        if (forehead) {
-          setSimpleHotSpot(forehead, smoothedData);
-          roi[i].sensorX = forehead.sensorX;
-          roi[i].sensorY =forehead.sensorY;
-          roi[i].sensorValue = forehead.sensorValue;
-          GForeheads.push(forehead);
-        } else {
-          setSimpleHotSpot(roi[i], smoothedData);
+    let newFaces = [];
+    let gotFace = false;
+
+    for (const faceDetect of roi) {
+      if (faceDetect.flavor == "Circle") {
+        continue;
+      }
+      gotFace = false;
+      for (const face of GFaces) {
+        if (faceDetect.overlapR(face.roi)) {
+          gotFace = true;
+          break;
         }
+      }
+      if (!gotFace) {
+        let face = detectForehead(
+          faceDetect,
+          smoothedData,
+          frameWidth,
+          frameHeight
+        );
+        if (face) {
+          newFaces.push(face);
+          setSimpleHotSpot(face.forehead, smoothedData);
+          face.roi.sensorX = face.forehead.sensorX;
+          face.roi.sensorY = face.forehead.sensorY;
+          face.roi.sensorValue = face.forehead.sensorValue;
+          GForeheads.push(face.forehead);
+        } else {
+          setSimpleHotSpot(faceDetect, smoothedData);
+        }
+      } else {
+        setSimpleHotSpot(faceDetect, smoothedData);
       }
     }
 
+    // let [faces, lostFaces] = trackFaces(frame, GFaces, newFaces);
+    const edgeData = edgeDetect(smoothedData, frameWidth, frameHeight);
+    for (const face of GFaces) {
+      const dest = new Float32Array(frameWidth * frameHeight);
+      let newHead = detectMovingForehead(
+        face.roi,
+        smoothedData,
+        frameWidth,
+        frameHeight
+      );
+      if (newHead) {
+        console.log("found new head at", newHead);
+        newFaces.push(newHead);
+      }
+      // let radius = face.roi.width() * 0.5;
+      // let r = face.roi;
+      // let [value, cx, cy] = circleDetectRadius(
+      //   edgeData,
+      //   dest,
+      //   radius,
+      //   width,
+      //   height,
+      //   face.roi.midX() - radius * 2,
+      //   r.midY() - radius * 2,
+      //   r.midX() + radius * 2,
+      //   r.midY() + radius * 2
+      // );
+      //
+      // if (r.contains(cx, cy)) {
+      //   console.log("still got circle updated values", cx, cy);
+      //   face.roi.x0 = cx - value;
+      //   face.roi.x1 = cx + value;
+      //   face.roi.y0 = cy - value;
+      //   face.roi.y1 = cy + value;
+      //   face.frameTime += 1;
+      // }
+    }
+    GFaces = newFaces;
     GROI = roi;
     return roi;
   }
@@ -1277,6 +1381,7 @@ window.onload = async function() {
       source = smoothedData;
 
       const features = featureDetect(
+        frameInfo.Telemetry.TimeOn,
         saltPepperData,
         smoothedData,
         frameWidth,
@@ -1424,12 +1529,13 @@ window.onload = async function() {
     overlayCtx.clearRect(0, 0, nativeOverlayWidth, nativeOverlayHeight);
   }
 
-  function correctedTemperatureForSensorValue(sensorValue : number) {
+  function correctedTemperatureForSensorValue(sensorValue: number) {
     let sensor_correction = -sensorAnomaly(GTimeSinceFFC);
-    sensor_correction += GDevice_temperature * GDevice_sensor_temperature_response;
+    sensor_correction +=
+      GDevice_temperature * GDevice_sensor_temperature_response;
     sensorValue += sensor_correction;
 
-    let stable_fix_factor = 1 - (GTimeSinceFFC-120) / 60;
+    let stable_fix_factor = 1 - (GTimeSinceFFC - 120) / 60;
     stable_fix_factor = Math.min(Math.max(stable_fix_factor, 0), 1);
     const stable_fix_amount = stable_fix_factor * GStable_correction;
     sensorValue += stable_fix_amount;
@@ -1456,40 +1562,49 @@ window.onload = async function() {
         overlayCtx.textAlign = "center";
         overlayCtx.font = "20px Arial";
         const quickDisplayHack = false;
-        if(quickDisplayHack) {
-            const temperature = correctedTemperatureForSensorValue(roi.sensorValue);
+        if (quickDisplayHack) {
+          const temperature = correctedTemperatureForSensorValue(
+            roi.sensorValue
+          );
 
-            overlayCtx.fillText('TRef / '+temperature.toFixed(GDisplay_precision)+" °C", roi.x0 * scaleX, roi.y0 * scaleY-3);
+          overlayCtx.fillText(
+            "TRef / " + temperature.toFixed(GDisplay_precision) + " °C",
+            roi.x0 * scaleX,
+            roi.y0 * scaleY - 3
+          );
         } else {
           //overlayCtx.fillText('SRef:'+(roi.sensorValue/100).toFixed(2), mx, my-mrad);
-          overlayCtx.fillText('Thermal Ref', mx, my-mrad-3);
-        }
-      }else{
-        drawTargetCircle(roi.sensorX, roi.sensorY);
-        overlayCtx.beginPath();
-        overlayCtx.strokeStyle = "#0000ff";
-        overlayCtx.rect(
-          roi.x0 * scaleX,
-          roi.y0 * scaleY,
-          (roi.x1 - roi.x0) * scaleX,
-          (roi.y1 - roi.y0) * scaleY
-        );
-        overlayCtx.stroke();
-        overlayCtx.textAlign = "left";
-        overlayCtx.font = "20px Arial";
-
-        const quickDisplayHack = true;
-        if(quickDisplayHack) {
-            const temperature = correctedTemperatureForSensorValue(roi.sensorValue);
-            overlayCtx.fillText('Face / '+temperature.toFixed(GDisplay_precision)+" °C", roi.x0 * scaleX, roi.y0 * scaleY-3);
-        }else {
-            overlayCtx.fillText('DFace:'+(roi.sensorValue/100).toFixed(1), roi.x0 * scaleX, roi.y0 * scaleY - 3);
+          overlayCtx.fillText("Thermal Ref", mx, my - mrad - 3);
         }
       }
+      // else{
+      //   drawTargetCircle(roi.sensorX, roi.sensorY);
+      //   overlayCtx.beginPath();
+      //   overlayCtx.strokeStyle = "#0000ff";
+      //   overlayCtx.rect(
+      //     roi.x0 * scaleX,
+      //     roi.y0 * scaleY,
+      //     (roi.x1 - roi.x0) * scaleX,
+      //     (roi.y1 - roi.y0) * scaleY
+      //   );
+      //   overlayCtx.stroke();
+      //   overlayCtx.textAlign = "left";
+      //   overlayCtx.font = "20px Arial";
+      //
+      //   const quickDisplayHack = true;
+      //   if(quickDisplayHack) {
+      //       const temperature = correctedTemperatureForSensorValue(roi.sensorValue);
+      //       overlayCtx.fillText('Face / '+temperature.toFixed(GDisplay_precision)+" °C", roi.x0 * scaleX, roi.y0 * scaleY-3);
+      //   }else {
+      //       overlayCtx.fillText('DFace:'+(roi.sensorValue/100).toFixed(1), roi.x0 * scaleX, roi.y0 * scaleY - 3);
+      //   }
+      // }
     });
-    GForeheads.forEach(function(roi) {
+    GFaces.forEach(function(face) {
+      let roi = face.roi;
+      drawTargetCircle(roi.sensorX, roi.sensorY);
       overlayCtx.beginPath();
-      overlayCtx.strokeStyle = ForeheadColour;
+      overlayCtx.strokeStyle = "#0000ff";
       overlayCtx.rect(
         roi.x0 * scaleX,
         roi.y0 * scaleY,
@@ -1497,6 +1612,39 @@ window.onload = async function() {
         (roi.y1 - roi.y0) * scaleY
       );
       overlayCtx.stroke();
+      overlayCtx.textAlign = "left";
+      overlayCtx.font = "20px Arial";
+
+      const quickDisplayHack = true;
+      if (quickDisplayHack) {
+        const temperature = correctedTemperatureForSensorValue(roi.sensorValue);
+        overlayCtx.fillText(
+          face.id +
+            "-Face / " +
+            temperature.toFixed(GDisplay_precision) +
+            " °C",
+          roi.x0 * scaleX,
+          roi.y0 * scaleY - 3
+        );
+      } else {
+        overlayCtx.fillText(
+          face.id + "DFace:" + (roi.sensorValue / 100).toFixed(1),
+          roi.x0 * scaleX,
+          roi.y0 * scaleY - 3
+        );
+      }
+      if (face.forehead) {
+        let roi = face.forehead;
+        overlayCtx.beginPath();
+        overlayCtx.strokeStyle = ForeheadColour;
+        overlayCtx.rect(
+          roi.x0 * scaleX,
+          roi.y0 * scaleY,
+          (roi.x1 - roi.x0) * scaleX,
+          (roi.y1 - roi.y0) * scaleY
+        );
+        overlayCtx.stroke();
+      }
     });
 
     // Draw the fov bounds
