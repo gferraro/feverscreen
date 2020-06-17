@@ -1,9 +1,11 @@
 import { BlobReader } from "./utils.js";
+import { loadXML, detect, detectThermal } from "./haaropencv.js";
+
 import {
   fahrenheitToCelsius,
   moduleTemperatureAnomaly,
   ROIFeature,
-  sensorAnomaly,
+  sensorAnomaly
 } from "./processing.js";
 import { DeviceApi } from "./api.js";
 import {
@@ -11,18 +13,18 @@ import {
   FrameInfo,
   Modes,
   NetworkInterface,
-  TemperatureSource,
+  TemperatureSource
 } from "./feverscreen-types.js";
 import {
   circleDetect,
   circleDetectRadius,
-  edgeDetect,
+  edgeDetect
 } from "./circledetect.js";
 import {
   buildSAT,
   ConvertCascadeXML,
   scanHaarParallel,
-  HaarCascade,
+  HaarCascade
 } from "./haarcascade.js";
 import { Face, Hotspot } from "./face.js";
 
@@ -35,6 +37,8 @@ let UncorrectedHotspot = 0;
 let UncorrectedThermalRef = 0;
 let UncorrectedThermalRefRange = 0;
 let RefRadius = 0;
+let facesThermal: ROIFeature[] = [];
+let oldThermal: ROIFeature[] = [];
 
 // Load debug mode, if set
 let dbg = window.localStorage.getItem("DEBUG_MODE");
@@ -127,19 +131,19 @@ const populateVersionInfo = async (element: HTMLDivElement) => {
     const [versionInfo, deviceInfo, networkInfo] = await Promise.all([
       DeviceApi.softwareVersion(),
       DeviceApi.deviceInfo(),
-      DeviceApi.networkInfo(),
+      DeviceApi.networkInfo()
     ]);
     const activeInterface = networkInfo.Interfaces.find(
-      (x) => x.IPAddresses !== null
+      x => x.IPAddresses !== null
     ) as NetworkInterface;
-    activeInterface.IPAddresses = activeInterface.IPAddresses.map((x) =>
+    activeInterface.IPAddresses = activeInterface.IPAddresses.map(x =>
       x.trim()
     );
     let ipv4 = activeInterface.IPAddresses[0];
     ipv4 = ipv4.substring(0, ipv4.indexOf("/"));
     const interfaceInfo = {
       LanInterface: activeInterface.Name,
-      "Ipv4 Address": ipv4,
+      "Ipv4 Address": ipv4
     };
     versionInfo.binaryVersion = versionInfo.binaryVersion.substr(0, 10);
     const itemList = document.createElement("ul");
@@ -179,10 +183,11 @@ function download(dataurl: string) {
 }
 
 function LoadCascadeXML() {
+  // retur2n;
   // XML files from :
   //  * https://www.researchgate.net/publication/317013979_Face_Detection_on_Infrared_Thermal_Image
   //  * https://www.researchgate.net/publication/322601448_Algorithms_for_Face_Detection_on_Infrared_Thermal_Images
-  fetch("/static/js/cascade_stg17.xml").then(async function (response) {
+  fetch("/static/js/nonthermal.xml").then(async function(response) {
     let parser = new DOMParser();
     let xmlDoc = parser.parseFromString(await response.text(), "text/xml");
     GCascadeFace = ConvertCascadeXML(xmlDoc);
@@ -190,7 +195,8 @@ function LoadCascadeXML() {
 }
 
 // Top of JS
-window.onload = async function () {
+window.onload = async function() {
+  loadXML();
   LoadCascadeXML();
   toggleDebugGUI();
   let GCalibrateTemperatureCelsius = 37;
@@ -204,7 +210,7 @@ window.onload = async function () {
     top: 0,
     right: 0,
     bottom: 0,
-    left: 0,
+    left: 0
   };
 
   //these are the *lowest* temperature in celsius for each category
@@ -324,7 +330,7 @@ window.onload = async function () {
         Right: fovBox.right,
         Bottom: fovBox.bottom,
         CalibrationBinaryVersion: binaryVersion,
-        UuidOfUpdater: UUID,
+        UuidOfUpdater: UUID
       });
       setOverlayMessages("Settings saved");
       setTimeout(setOverlayMessages, 500);
@@ -334,25 +340,23 @@ window.onload = async function () {
     GCalibrate_body_location = source;
     temperatureSourceChanged = true;
   };
-  (document.getElementById(
-    "source-ear"
-  ) as HTMLInputElement).addEventListener("click", (e) =>
-    setTemperatureSource(TemperatureSource.EAR)
+  (document.getElementById("source-ear") as HTMLInputElement).addEventListener(
+    "click",
+    e => setTemperatureSource(TemperatureSource.EAR)
   );
   (document.getElementById(
     "source-forehead"
-  ) as HTMLInputElement).addEventListener("click", (e) =>
+  ) as HTMLInputElement).addEventListener("click", e =>
     setTemperatureSource(TemperatureSource.FOREHEAD)
   );
   (document.getElementById(
     "source-armpit"
-  ) as HTMLInputElement).addEventListener("click", (e) =>
+  ) as HTMLInputElement).addEventListener("click", e =>
     setTemperatureSource(TemperatureSource.ARMPIT)
   );
-  (document.getElementById(
-    "source-oral"
-  ) as HTMLInputElement).addEventListener("click", (e) =>
-    setTemperatureSource(TemperatureSource.ORAL)
+  (document.getElementById("source-oral") as HTMLInputElement).addEventListener(
+    "click",
+    e => setTemperatureSource(TemperatureSource.ORAL)
   );
 
   const changeFeverThreshold = (e: Event) => {
@@ -367,7 +371,7 @@ window.onload = async function () {
   setRecordStatus();
   (document.getElementById("record-btn") as HTMLInputElement).addEventListener(
     "click",
-    async (e) => {
+    async e => {
       const btn = e.target as HTMLInputElement;
       const status = await DeviceApi.recorderStatus();
       if (!status.processor) {
@@ -493,9 +497,8 @@ window.onload = async function () {
     offset = left + (100 - (left + right)) * 0.5;
     fovTopHandle.style.left = `${offset}%`;
     fovBottomHandle.style.left = `${offset}%`;
-    fovToggleMirror.style.top = `${
-      fovBox.top + (100 - (fovBox.top + fovBox.bottom)) * 0.5
-    }%`;
+    fovToggleMirror.style.top = `${fovBox.top +
+      (100 - (fovBox.top + fovBox.bottom)) * 0.5}%`;
     fovToggleMirror.style.left = `${left + (100 - (left + right)) * 0.5}%`;
   }
 
@@ -533,9 +536,8 @@ window.onload = async function () {
             offset = fovBox.top + (100 - (fovBox.bottom + fovBox.top)) * 0.5;
             fovLeftHandle.style.top = `${offset}%`;
             fovRightHandle.style.top = `${offset}%`;
-            fovToggleMirror.style.top = `${
-              fovBox.top + (100 - (fovBox.top + fovBox.bottom)) * 0.5
-            }%`;
+            fovToggleMirror.style.top = `${fovBox.top +
+              (100 - (fovBox.top + fovBox.bottom)) * 0.5}%`;
             break;
           case "right-handle":
             maxInsetPercentage = 100 - (fovBox[l] + minDimensions);
@@ -547,9 +549,8 @@ window.onload = async function () {
             offset = fovBox[l] + (100 - (fovBox[l] + fovBox[r])) * 0.5;
             fovTopHandle.style.left = `${offset}%`;
             fovBottomHandle.style.left = `${offset}%`;
-            fovToggleMirror.style.left = `${
-              fovBox[l] + (100 - (fovBox[l] + fovBox[r])) * 0.5
-            }%`;
+            fovToggleMirror.style.left = `${fovBox[l] +
+              (100 - (fovBox[l] + fovBox[r])) * 0.5}%`;
             break;
           case "bottom-handle":
             maxInsetPercentage = 100 - (fovBox.top + minDimensions);
@@ -564,9 +565,8 @@ window.onload = async function () {
             offset = fovBox.top + (100 - (fovBox.bottom + fovBox.top)) * 0.5;
             fovLeftHandle.style.top = `${offset}%`;
             fovRightHandle.style.top = `${offset}%`;
-            fovToggleMirror.style.top = `${
-              fovBox.top + (100 - (fovBox.top + fovBox.bottom)) * 0.5
-            }%`;
+            fovToggleMirror.style.top = `${fovBox.top +
+              (100 - (fovBox.top + fovBox.bottom)) * 0.5}%`;
             break;
           case "left-handle":
             maxInsetPercentage = 100 - (fovBox[r] + minDimensions);
@@ -578,9 +578,8 @@ window.onload = async function () {
             offset = fovBox[l] + (100 - (fovBox[l] + fovBox[r])) * 0.5;
             fovTopHandle.style.left = `${offset}%`;
             fovBottomHandle.style.left = `${offset}%`;
-            fovToggleMirror.style.left = `${
-              fovBox[l] + (100 - (fovBox[l] + fovBox[r])) * 0.5
-            }%`;
+            fovToggleMirror.style.left = `${fovBox[l] +
+              (100 - (fovBox[l] + fovBox[r])) * 0.5}%`;
             break;
         }
         // Update saved fovBox:
@@ -603,7 +602,7 @@ window.onload = async function () {
       fovTopHandle,
       fovRightHandle,
       fovBottomHandle,
-      fovLeftHandle,
+      fovLeftHandle
     ]) {
       // Mouse
       dragHandle.addEventListener("mousedown", startDrag("mousemove"));
@@ -630,7 +629,7 @@ window.onload = async function () {
     }
   );
 
-  calibrationButton.addEventListener("click", (event) => {
+  calibrationButton.addEventListener("click", event => {
     if (Mode === Modes.SCAN) {
       startCalibration();
     } else if (Mode === Modes.CALIBRATE) {
@@ -671,7 +670,7 @@ window.onload = async function () {
     startScan();
   });
 
-  temperatureInputCelsius.addEventListener("input", (event) => {
+  temperatureInputCelsius.addEventListener("input", event => {
     let entry_value = parseFloat((event.target as HTMLInputElement).value);
     if (entry_value < 75) {
       temperatureInputLabel.innerHTML = "&deg;C";
@@ -1339,28 +1338,51 @@ window.onload = async function () {
     height: number
   ) {
     //zero knowledge..
-    let faces: ROIFeature[] = [];
-
+    // let faces: ROIFeature[] = [];
+    //
     if (GCascadeFace != null) {
+      performance.mark("oldhaar start");
+
       performance.mark("buildSat start");
       const satData = buildSAT(smoothedData, width, height, sensorCorrection);
       performance.mark("buildSat end");
       performance.measure("build SAT", "buildSat start", "buildSat end");
-      faces = await scanHaarParallel(
+      oldThermal = await scanHaarParallel(
         GCascadeFace,
         satData,
         width,
         height,
         sensorCorrection
       );
+      performance.mark("oldhaar end");
+      performance.measure("oldhaar detect", "oldhaar start", "oldhaar end");
     }
 
-    performance.mark("dtr start");
-    GThermalReference = detectThermalReference(
-      saltPepperData,
+    performance.mark("opencvhaar start");
+
+    const colorFrame = frameToColour(
       smoothedData,
+      saltPepperData,
       sensorCorrection
     );
+    // ctx.clearRect(0, 0, nativeOverlayWidth, nativeOverlayHeight);
+    // ctx.putImageData(colorFrame, 0, 0);
+    // let faces: ROIFeature[] = [];
+    let faces = detect(smoothedData, width, height, colorFrame);
+    performance.mark("opencvhaar end");
+    performance.measure(
+      "opencvhaar detect",
+      "opencvhaar start",
+      "opencvhaar end"
+    );
+
+    facesThermal = detectThermal(smoothedData, width, height);
+    performance.mark("dtr start");
+    // GThermalReference = detectThermalReference(
+    //   saltPepperData,
+    //   smoothedData,
+    //   sensorCorrection
+    // );
 
     performance.mark("dtr end");
     performance.measure("detect thermal reference", "dtr start", "dtr end");
@@ -1368,13 +1390,13 @@ window.onload = async function () {
     performance.mark("dfh start");
     if (GThermalReference) {
       faces = faces.filter(
-        (face) => !face.overlapsROI(GThermalReference as ROIFeature)
+        face => !face.overlapsROI(GThermalReference as ROIFeature)
       );
     }
     let newFaces: Face[] = [];
     let face: Face;
     for (const haarFace of faces) {
-      const existingFace = GFaces.find((face) =>
+      const existingFace = GFaces.find(face =>
         haarFace.overlapsROI(face.haarFace)
       );
 
@@ -1513,7 +1535,7 @@ window.onload = async function () {
     //const temperature = 40
 
     if (GFaces.length) {
-      let face = GFaces.find((f) => f.haarActive());
+      let face = GFaces.find(f => f.haarActive());
       if (!face) {
         face = GFaces[0];
       }
@@ -1527,6 +1549,28 @@ window.onload = async function () {
 
     // Warning: Order is important in this function, be very careful when moving things around.
 
+    let feverThreshold = estimatedValueForTemperature(
+      GThreshold_fever - 0.5,
+      sensorCorrection
+    );
+    let checkThreshold = estimatedValueForTemperature(
+      GThreshold_check - 6.5,
+      sensorCorrection
+    );
+    //let roomThreshold = estimatedValueForTemperature(14.0, sensorCorrection);
+    let roomThreshold = 28804.0;
+    let imgData = frameToColour(smoothedData, saltPepperData, sensorCorrection);
+    ctx.putImageData(imgData, 0, 0);
+
+    drawOverlay();
+    performance.mark("display end");
+    performance.measure("display frame viz", "display start", "display end");
+  }
+  function frameToColour(
+    smoothedData: Float32Array,
+    saltPepperData: Float32Array,
+    sensorCorrection: number
+  ): any {
     let feverThreshold = estimatedValueForTemperature(
       GThreshold_fever - 0.5,
       sensorCorrection
@@ -1571,12 +1615,7 @@ window.onload = async function () {
       imgData.data[index * 4 + 2] = b;
       imgData.data[index * 4 + 3] = 255;
     }
-
-    ctx.putImageData(imgData, 0, 0);
-
-    drawOverlay();
-    performance.mark("display end");
-    performance.measure("display frame viz", "display start", "display end");
+    return imgData;
   }
 
   function clearOverlay() {
@@ -1629,42 +1668,63 @@ window.onload = async function () {
       overlayCtx.fillText(text, mx, my - mrad - 3);
       overlayCtx.restore();
     }
-
+    for (const face of facesThermal) {
+      overlayCtx.beginPath();
+      overlayCtx.strokeStyle = "#00ffff";
+      overlayCtx.rect(
+        face.x0 * scaleX,
+        face.y0 * scaleY,
+        (face.x1 - face.x0) * scaleX,
+        (face.y1 - face.y0) * scaleY
+      );
+      overlayCtx.stroke();
+    }
+    for (const face of oldThermal) {
+      overlayCtx.beginPath();
+      overlayCtx.strokeStyle = "#ff0000";
+      overlayCtx.rect(
+        face.x0 * scaleX,
+        face.y0 * scaleY,
+        (face.x1 - face.x0) * scaleX,
+        (face.y1 - face.y0) * scaleY
+      );
+      overlayCtx.stroke();
+    }
     for (const face of GFaces) {
       if (DEBUG_MODE) {
-        for (const roi of face.xFeatures) {
-          overlayCtx.beginPath();
-          overlayCtx.strokeStyle = ForeheadColour;
-          overlayCtx.rect(
-            roi.x0 * scaleX,
-            roi.y0 * scaleY,
-            (roi.x1 - roi.x0) * scaleX,
-            (roi.y1 - roi.y0) * scaleY
-          );
-          overlayCtx.stroke();
-        }
-        for (const roi of face.yFeatures) {
-          overlayCtx.beginPath();
-          overlayCtx.strokeStyle = "#ffff00";
-          overlayCtx.rect(
-            roi.x0 * scaleX,
-            roi.y0 * scaleY,
-            (roi.x1 - roi.x0) * scaleX,
-            (roi.y1 - roi.y0) * scaleY
-          );
-          overlayCtx.stroke();
-        }
+        // for (const roi of face.xFeatures) {
+        //   overlayCtx.beginPath();
+        //   overlayCtx.strokeStyle = ForeheadColour;
+        //   overlayCtx.rect(
+        //     roi.x0 * scaleX,
+        //     roi.y0 * scaleY,
+        //     (roi.x1 - roi.x0) * scaleX,
+        //     (roi.y1 - roi.y0) * scaleY
+        //   );
+        //   overlayCtx.stroke();
+        // }
+        // for (const roi of face.yFeatures) {
+        //   overlayCtx.beginPath();
+        //   overlayCtx.strokeStyle = "#ffff00";
+        //   overlayCtx.rect(
+        //     roi.x0 * scaleX,
+        //     roi.y0 * scaleY,
+        //     (roi.x1 - roi.x0) * scaleX,
+        //     (roi.y1 - roi.y0) * scaleY
+        //   );
+        //   overlayCtx.stroke();
+        // }
       }
 
-      if (face.haarActive()) {
-        drawHaarTracking(
-          face.haarFace,
-          scaleX,
-          scaleY,
-          face.hotspot,
-          sensorCorrectionDriftOnly
-        );
-      }
+      // if (face.haarActive()) {
+      drawHaarTracking(
+        face.haarFace,
+        scaleX,
+        scaleY,
+        face.hotspot,
+        sensorCorrectionDriftOnly
+      );
+      // }
 
       if (face.haarAge < MinFaceAge || !face.tracked()) {
         continue;
@@ -1822,7 +1882,7 @@ window.onload = async function () {
         Right: fovBox.right,
         Bottom: fovBox.bottom,
         CalibrationBinaryVersion: binaryVersion,
-        UuidOfUpdater: UUID,
+        UuidOfUpdater: UUID
       });
       setOverlayMessages("Calibration saved");
     }
@@ -1916,14 +1976,14 @@ window.onload = async function () {
           JSON.stringify({
             type: "Register",
             data: navigator.userAgent,
-            uuid: UUID,
+            uuid: UUID
           })
         );
       } else {
         setTimeout(() => registerSocket(socket), 100);
       }
     };
-    socket.addEventListener("open", (event) => registerSocket(socket));
+    socket.addEventListener("open", event => registerSocket(socket));
     socket.addEventListener("close", () => {
       // When we do reconnect, we need to treat it as a new connection
       reconnected = true;
@@ -1975,7 +2035,7 @@ window.onload = async function () {
         );
         return {
           frameInfo,
-          frame,
+          frame
         };
       } catch (e) {
         console.error("Malformed JSON payload", e);
@@ -2016,7 +2076,7 @@ window.onload = async function () {
             data: `${latestFrameTimeOnMs - timeOn}ms behind current: frame#${
               dropFrame.frameInfo.Telemetry.FrameCount
             }`,
-            uuid: UUID,
+            uuid: UUID
           })
         );
       }
@@ -2034,7 +2094,7 @@ window.onload = async function () {
       skippedFramesServer = 0;
     }
 
-    socket.addEventListener("message", async (event) => {
+    socket.addEventListener("message", async event => {
       if (event.data instanceof Blob) {
         if (prevOverlayMessages[0] === "Loading...") {
           setOverlayMessages();
@@ -2056,13 +2116,13 @@ window.onload = async function () {
       }
     });
   };
-  populateVersionInfo(versionInfoElement).then((result) => {
+  populateVersionInfo(versionInfoElement).then(result => {
     if (typeof result === "object") {
       const { networkInfo } = result;
       const activeInterface = networkInfo.Interfaces.find(
-        (x) => x.IPAddresses !== null
+        x => x.IPAddresses !== null
       ) as NetworkInterface;
-      activeInterface.IPAddresses = activeInterface.IPAddresses.map((x) =>
+      activeInterface.IPAddresses = activeInterface.IPAddresses.map(x =>
         x.trim()
       );
       let deviceIp = activeInterface.IPAddresses[0];
@@ -2078,7 +2138,7 @@ window.onload = async function () {
           socket.send(
             JSON.stringify({
               type: "Heartbeat",
-              uuid: UUID,
+              uuid: UUID
             })
           );
         }
@@ -2160,7 +2220,7 @@ window.onload = async function () {
       Calibration: calibration,
       Camera: camera,
       BinaryVersion,
-      AppVersion,
+      AppVersion
     } = frameInfo;
     const didUpdateCalibration = updateCalibration(calibration);
     let softwareWasUpdated = false;
@@ -2189,7 +2249,7 @@ window.onload = async function () {
             JSON.stringify({
               appVersion: AppVersion,
               binaryVersion: BinaryVersion,
-              wasUpdated: true,
+              wasUpdated: true
             })
           );
           if (reconnected) {
@@ -2204,7 +2264,7 @@ window.onload = async function () {
             JSON.stringify({
               appVersion: AppVersion,
               binaryVersion: BinaryVersion,
-              wasUpdated: false,
+              wasUpdated: false
             })
           );
         }
@@ -2214,7 +2274,7 @@ window.onload = async function () {
           JSON.stringify({
             appVersion: AppVersion,
             binaryVersion: BinaryVersion,
-            wasUpdated: false,
+            wasUpdated: false
           })
         );
       }

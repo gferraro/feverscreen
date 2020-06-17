@@ -138,13 +138,13 @@ export async function scanHaarParallel(
   const workerPromises = [];
   for (const scale of scales) {
     workerPromises.push(
-      new Promise(function (resolve, reject) {
+      new Promise(function(resolve, reject) {
         let terminationTimer = -1;
         // Kill the worker if it takes longer than a frame
         let timeout = 1000 / 8.7;
         if (WorkerPool.length === 0) {
           const worker = new Worker("../js/eval-haar-worker.js", {
-            type: "module",
+            type: "module"
           });
           // Copying the HaarCascade data to the worker each frame has significant overhead,
           // so it's better to just do it once when we init the worker, as the data is constant.
@@ -155,7 +155,7 @@ export async function scanHaarParallel(
         }
         let worker = WorkerPool.pop() as Worker;
         let s: number;
-        worker.onmessage = (r) => {
+        worker.onmessage = r => {
           clearTimeout(terminationTimer);
           // Mark resolved and return worker to pool.
           // console.log(`resolved worker after ${new Date().getTime() - s}, return to pool`);
@@ -173,7 +173,7 @@ export async function scanHaarParallel(
           frameWidth,
           frameHeight,
           satData,
-          s,
+          s
         });
         // Terminate the worker if it takes too long?
         terminationTimer = setTimeout(() => {
@@ -187,9 +187,9 @@ export async function scanHaarParallel(
     );
   }
   try {
-    let results: ROIFeature[][] = await Promise.all(
-      workerPromises as Promise<ROIFeature[]>[]
-    );
+    let results: ROIFeature[][] = await Promise.all(workerPromises as Promise<
+      ROIFeature[]
+    >[]);
     const allResults = results
       .reduce((acc: ROIFeature[], curr: ROIFeature[]) => {
         acc.push(...curr);
@@ -213,8 +213,15 @@ export async function scanHaarParallel(
         m.mergeCount = mergedResult.mergeCount;
 
         // NOTE(jon): I don't quite understand what tryMerge is trying to do, with its mergeCount etc.
-        if (m.tryMerge(r.x0, r.y0, r.x1, r.y1)) {
+        if (m.overlapsROI(r)) {
+          if (m.width() < r.x1 - r.x0) {
+            r.x0 = m.x0;
+            r.y0 = m.y0;
+            r.x1 = m.x1;
+            r.y1 = m.y1;
+          }
           didMerge = true;
+
           break;
         }
       }
@@ -317,8 +324,14 @@ export function ConvertCascadeXML(source: Document): HaarCascade | null {
         continue;
       }
 
-      const internalNodes = txc1.trim().split(" ").map(Number);
-      const leafValues = txc2.trim().split(" ").map(Number);
+      const internalNodes = txc1
+        .trim()
+        .split(" ")
+        .map(Number);
+      const leafValues = txc2
+        .trim()
+        .split(" ")
+        .map(Number);
       stage.weakClassifiers.push(
         new HaarWeakClassifier(
           internalNodes,

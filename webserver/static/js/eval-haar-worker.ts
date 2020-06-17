@@ -118,7 +118,7 @@ function evaluateFeature(
   return result;
 }
 
-onmessage = function (event) {
+onmessage = function(event) {
   switch (event.data.type) {
     case "eval":
       const {
@@ -126,7 +126,7 @@ onmessage = function (event) {
         frameWidth,
         frameHeight,
         satData,
-        s,
+        s
       }: {
         scale: number;
         frameWidth: number;
@@ -153,7 +153,7 @@ function evalAtScale(
   satData: Float32Array[]
 ): ROIFeature[] {
   // console.log(`work startup time ${new Date().getTime() - s}`);
-  const result = [];
+  const result: ROIFeature[] = [];
   const border = 2;
   const skipper = scale * 0.05;
   for (let x = border + scale; x + scale + border < frameWidth; x += skipper) {
@@ -174,10 +174,19 @@ function evalAtScale(
         let didMerge = false;
 
         for (let k = 0; k < result.length; k++) {
-          if (result[k].tryMerge(r.x0, r.y0, r.x1, r.y1)) {
-            didMerge = true;
-            break;
+          if (result[k].overlapsROI(r)) {
+            if (r.width() < result[k].width()) {
+              result[k] = r;
+              console.log("merged");
+              didMerge = true;
+
+              break;
+            }
           }
+          // if (result[k].tryMerge(r.x0, r.y0, r.x1, r.y1)) {
+          //   didMerge = true;
+          //   break;
+          // }
         }
 
         if (!didMerge) {
