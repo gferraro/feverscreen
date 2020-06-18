@@ -33,7 +33,7 @@ function evalHaar(
       satSq[bx0 + by0 * w2]);
 
   let determinant = sumBSq - sumB * sumB;
-  if (determinant < 10) {
+  if (determinant < 1024) {
     return -1;
   }
 

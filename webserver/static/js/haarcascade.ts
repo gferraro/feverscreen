@@ -128,7 +128,7 @@ export async function scanHaarParallel(
   const scales: number[] = [];
   let scale = 10;
   while (scale < frameHeight / 2) {
-    scale *= 1.25;
+    scale *= 1.1;
     scales.push(scale);
   }
   performance.mark("ev start");
@@ -246,7 +246,11 @@ export function ConvertCascadeXML(source: Document): HaarCascade | null {
   if (stages == null || features == null) {
     return null;
   }
-
+  let widthElement = source.getElementsByTagName("width")[0];
+  let heightElement = source.getElementsByTagName("height")[0];
+  let width = widthElement ? Number(widthElement.textContent) : 10;
+  let height = heightElement ? Number(heightElement.textContent) : 10;
+  console.log(width, "x", height);
   for (
     let featureIndex = 0;
     featureIndex < features.childNodes.length;
@@ -258,9 +262,10 @@ export function ConvertCascadeXML(source: Document): HaarCascade | null {
     }
 
     let feature: HaarFeature = new HaarFeature();
-    if (currentFeature.getElementsByTagName("tilted")) {
+    if (currentFeature.getElementsByTagName("tilted").length > 0) {
       let tiltedNode = currentFeature.getElementsByTagName("tilted")[0];
       feature.tilted = tiltedNode.textContent == "1";
+      feature.tilted = false;
     }
 
     let rectsNode = currentFeature.getElementsByTagName("rects")[0];
@@ -273,13 +278,18 @@ export function ConvertCascadeXML(source: Document): HaarCascade | null {
       if (qq.length != 5) {
         continue;
       }
-      let halfWidth = 10 / 2;
-      let halfHeight = 10 / 2;
+
+      let halfWidth = width / 2;
+      let halfHeight = height / 2;
       let haarRect: HaarRect = new HaarRect();
       haarRect.x0 = Number(qq[0]) / halfWidth - 1.0;
       haarRect.y0 = Number(qq[1]) / halfHeight - 1.0;
       haarRect.x1 = haarRect.x0 + Number(qq[2]) / halfWidth;
       haarRect.y1 = haarRect.y0 + Number(qq[3]) / halfHeight;
+      // haarRect.x0 = Number(qq[0]);
+      // haarRect.y0 = Number(qq[1]);
+      // haarRect.x1 = haarRect.x0 + Number(qq[2]);
+      // haarRect.y1 = haarRect.y0 + Number(qq[3]);
       haarRect.weight = Number(qq[4]);
       feature.rects.push(haarRect);
     }
@@ -337,6 +347,7 @@ export function ConvertCascadeXML(source: Document): HaarCascade | null {
     }
     result.stages.push(stage);
   }
+  console.log(result);
 
   return result;
 }
