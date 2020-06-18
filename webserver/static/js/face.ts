@@ -2,7 +2,7 @@ import {
   ROIFeature,
   FeatureState,
   sobelEdge,
-  featureLine,
+  featureLine
 } from "./processing.js";
 
 const UseEdgeDirection = false;
@@ -57,7 +57,7 @@ class Window {
     if (this.savedAverage == -1) {
       const mean = this.average();
       this.savedDeviation = Math.sqrt(
-        this.values.map((x) => Math.pow(x - mean, 2)).reduce((a, b) => a + b) /
+        this.values.map(x => Math.pow(x - mean, 2)).reduce((a, b) => a + b) /
           this.values.length
       );
     }
@@ -213,7 +213,7 @@ class Tracking {
 export enum Gradient {
   Decreasing = -1,
   Neutral = 0,
-  Increasing = 1,
+  Increasing = 1
 }
 
 // meausre the change in values over the last 3 values
@@ -427,6 +427,11 @@ export class Face {
     this.numFrames += 1;
     if (!this.tracked()) {
       if (this.haarActive()) {
+        this.haarFace = this.haarFace.extend(
+          FaceTrackingMaxDelta,
+          frameWidth,
+          frameHeight
+        );
         return this.detectForehead(
           this.haarFace,
           source,

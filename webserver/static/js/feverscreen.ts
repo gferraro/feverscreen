@@ -1339,57 +1339,42 @@ window.onload = async function() {
     width: number,
     height: number
   ) {
-    //zero knowledge..
+    // //zero knowledge..
     // let faces: ROIFeature[] = [];
+    // //
+    // if (GCascadeFace != null) {
+    //   performance.mark("buildSat start");
+    //   let feverThreshold = estimatedValueForTemperature(
+    //     GThreshold_fever - 0.5,
+    //     sensorCorrection
+    //   );
+    //   let checkThreshold = estimatedValueForTemperature(
+    //     GThreshold_check - 6.5,
+    //     sensorCorrection
+    //   );
+    //   let roomThreshold = 28804.0;
     //
-    if (GCascadeFace != null) {
-      performance.mark("oldhaar start");
-
-      performance.mark("buildSat start");
-      let feverThreshold = estimatedValueForTemperature(
-        GThreshold_fever - 0.5,
-        sensorCorrection
-      );
-      let checkThreshold = estimatedValueForTemperature(
-        GThreshold_check - 6.5,
-        sensorCorrection
-      );
-      //let roomThreshold = estimatedValueForTemperature(14.0, sensorCorrection);
-      let roomThreshold = 28804.0;
-
-      const satData = buildSATGray(
-        smoothedData,
-        saltPepperData,
-        width,
-        height,
-        sensorCorrection,
-        feverThreshold,
-        roomThreshold,
-        checkThreshold
-      );
-      //       10800: 28205096
-      // 10801: 28463760
-      // −258664
-      //
-      // 10800: 81795.5703125
-      // 10801: 81824.828125
-      // -29
-      const satDataT = buildSAT(smoothedData, width, height, sensorCorrection);
-      performance.mark("buildSat end");
-      performance.measure("build SAT", "buildSat start", "buildSat end");
-      oldThermal = await scanHaarParallel(
-        GCascadeFace,
-        satData,
-        width,
-        height,
-        sensorCorrection
-      );
-      performance.mark("oldhaar end");
-      performance.measure("oldhaar detect", "oldhaar start", "oldhaar end");
-    }
-
-    performance.mark("opencvhaar start");
-
+    //   const satData = buildSATGray(
+    //     smoothedData,
+    //     saltPepperData,
+    //     width,
+    //     height,
+    //     sensorCorrection,
+    //     feverThreshold,
+    //     roomThreshold,
+    //     checkThreshold
+    //   );
+    //
+    //   performance.mark("buildSat end");
+    //   performance.measure("build SAT", "buildSat start", "buildSat end");
+    //   faces = await scanHaarParallel(
+    //     GCascadeFace,
+    //     satData,
+    //     width,
+    //     height,
+    //     sensorCorrection
+    //   );
+    // }
     const colorFrame = frameToGray(
       smoothedData,
       saltPepperData,
@@ -1399,24 +1384,8 @@ window.onload = async function() {
     // ctx.putImageData(colorFrame, 0, 0);
     // let faces: ROIFeature[] = [];
     let faces = detect(smoothedData, width, height, colorFrame);
-    performance.mark("opencvhaar end");
-    performance.measure(
-      "opencvhaar detect",
-      "opencvhaar start",
-      "opencvhaar end"
-    );
 
     facesThermal = detectThermal(smoothedData, width, height);
-    performance.mark("dtr start");
-    // GThermalReference = detectThermalReference(
-    //   saltPepperData,
-    //   smoothedData,
-    //   sensorCorrection
-    // );
-
-    performance.mark("dtr end");
-    performance.measure("detect thermal reference", "dtr start", "dtr end");
-
     performance.mark("dfh start");
     if (GThermalReference) {
       faces = faces.filter(
@@ -1773,28 +1742,28 @@ window.onload = async function() {
     }
     for (const face of GFaces) {
       if (DEBUG_MODE) {
-        // for (const roi of face.xFeatures) {
-        //   overlayCtx.beginPath();
-        //   overlayCtx.strokeStyle = ForeheadColour;
-        //   overlayCtx.rect(
-        //     roi.x0 * scaleX,
-        //     roi.y0 * scaleY,
-        //     (roi.x1 - roi.x0) * scaleX,
-        //     (roi.y1 - roi.y0) * scaleY
-        //   );
-        //   overlayCtx.stroke();
-        // }
-        // for (const roi of face.yFeatures) {
-        //   overlayCtx.beginPath();
-        //   overlayCtx.strokeStyle = "#ffff00";
-        //   overlayCtx.rect(
-        //     roi.x0 * scaleX,
-        //     roi.y0 * scaleY,
-        //     (roi.x1 - roi.x0) * scaleX,
-        //     (roi.y1 - roi.y0) * scaleY
-        //   );
-        //   overlayCtx.stroke();
-        // }
+        for (const roi of face.xFeatures) {
+          overlayCtx.beginPath();
+          overlayCtx.strokeStyle = ForeheadColour;
+          overlayCtx.rect(
+            roi.x0 * scaleX,
+            roi.y0 * scaleY,
+            (roi.x1 - roi.x0) * scaleX,
+            (roi.y1 - roi.y0) * scaleY
+          );
+          overlayCtx.stroke();
+        }
+        for (const roi of face.yFeatures) {
+          overlayCtx.beginPath();
+          overlayCtx.strokeStyle = "#ffff00";
+          overlayCtx.rect(
+            roi.x0 * scaleX,
+            roi.y0 * scaleY,
+            (roi.x1 - roi.x0) * scaleX,
+            (roi.y1 - roi.y0) * scaleY
+          );
+          overlayCtx.stroke();
+        }
       }
 
       // if (face.haarActive()) {
