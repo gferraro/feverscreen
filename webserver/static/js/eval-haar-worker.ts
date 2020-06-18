@@ -33,11 +33,11 @@ function evalHaar(
       satSq[bx0 + by0 * w2]);
 
   let determinant = sumBSq - sumB * sumB;
-  if (determinant < 1024) {
+  if (determinant < 10) {
     return -1;
   }
 
-  let sd = Math.sqrt(Math.max(10, determinant));
+  let sd = Math.sqrt(determinant);
 
   for (let i = 0; i < Cascade.stages.length; i++) {
     let stage = Cascade.stages[i];
@@ -153,7 +153,7 @@ function evalAtScale(
   satData: Float32Array[]
 ): ROIFeature[] {
   // console.log(`work startup time ${new Date().getTime() - s}`);
-  const result: ROIFeature[] = [];
+  const result = [];
   const border = 2;
   const skipper = scale * 0.05;
   for (let x = border + scale; x + scale + border < frameWidth; x += skipper) {
@@ -174,19 +174,10 @@ function evalAtScale(
         let didMerge = false;
 
         for (let k = 0; k < result.length; k++) {
-          if (result[k].overlapsROI(r)) {
-            if (r.width() < result[k].width()) {
-              result[k] = r;
-              console.log("merged");
-              didMerge = true;
-
-              break;
-            }
+          if (result[k].tryMerge(r.x0, r.y0, r.x1, r.y1)) {
+            didMerge = true;
+            break;
           }
-          // if (result[k].tryMerge(r.x0, r.y0, r.x1, r.y1)) {
-          //   didMerge = true;
-          //   break;
-          // }
         }
 
         if (!didMerge) {

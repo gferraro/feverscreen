@@ -213,15 +213,8 @@ export async function scanHaarParallel(
         m.mergeCount = mergedResult.mergeCount;
 
         // NOTE(jon): I don't quite understand what tryMerge is trying to do, with its mergeCount etc.
-        if (m.overlapsROI(r)) {
-          if (m.width() < r.x1 - r.x0) {
-            r.x0 = m.x0;
-            r.y0 = m.y0;
-            r.x1 = m.x1;
-            r.y1 = m.y1;
-          }
+        if (m.tryMerge(r.x0, r.y0, r.x1, r.y1)) {
           didMerge = true;
-
           break;
         }
       }
@@ -265,8 +258,10 @@ export function ConvertCascadeXML(source: Document): HaarCascade | null {
     }
 
     let feature: HaarFeature = new HaarFeature();
-    let tiltedNode = currentFeature.getElementsByTagName("tilted")[0];
-    feature.tilted = tiltedNode.textContent == "1";
+    if (currentFeature.getElementsByTagName("tilted")) {
+      let tiltedNode = currentFeature.getElementsByTagName("tilted")[0];
+      feature.tilted = tiltedNode.textContent == "1";
+    }
 
     let rectsNode = currentFeature.getElementsByTagName("rects")[0];
     for (let i = 0; i < rectsNode.childNodes.length; i++) {
@@ -344,4 +339,104 @@ export function ConvertCascadeXML(source: Document): HaarCascade | null {
   }
 
   return result;
+}
+
+export function buildSATGray(
+  source: Float32Array,
+  saltPepper: Float32Array,
+  width: number,
+  height: number,
+  sensorCorrection: number,
+  feverThreshold: number,
+  roomThreshold: number,
+  checkThreshold: number
+): [Float32Array, Float32Array] {
+  if (window.SharedArrayBuffer === undefined) {
+    // Having the array buffers able to be shared across workers should be faster
+    // where available.
+    window.SharedArrayBuffer = window.ArrayBuffer as any;
+  }
+  const sizeOfFloat = 4;
+  const dest = new Float32Array(
+    new SharedArrayBuffer((width + 2) * (height + 3) * sizeOfFloat)
+  );
+  const destSq = new Float32Array(
+    new SharedArrayBuffer((width + 2) * (height + 3) * sizeOfFloat)
+  );
+
+  const w2 = width + 2;
+
+  //Todo: pass in reasonable values for min/max
+  let vMin = source[0];
+  let vMax = source[0];
+  for (let i = 0; i < width * height; i++) {
+    vMin = Math.min(vMin, source[i]);
+    vMax = Math.max(vMax, source[i]);
+  }
+  vMin += sensorCorrection;
+  vMax += sensorCorrection;
+
+  let rescale = 1; //255/(vMax-vMin);
+
+  for (let y = 0; y <= height; y++) {
+    let runningSum = 0;
+    let runningSumSq = 0;
+    for (let x = 0; x <= width; x++) {
+      const indexS = Math.min(y, height - 1) * width + Math.min(x, width - 1);
+      const indexD = (y + 2) * w2 + (x + 1);
+
+      let gray = kelvinToGray(
+        source[indexS],
+        saltPepper[indexS],
+        feverThreshold,
+        roomThreshold,
+        checkThreshold
+      );
+      const value = gray * rescale;
+
+      runningSum += value;
+      runningSumSq += value * value;
+
+      dest[indexD] = dest[indexD - w2] + runningSum;
+      destSq[indexD] = destSq[indexD - w2] + runningSumSq;
+    }
+  }
+  return [dest, destSq];
+}
+
+function kelvinToGray(
+  smoothKelvin: number,
+  saltPepper: number,
+  feverThreshold: number,
+  roomThreshold: number,
+  checkThreshold: number
+): number {
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  if (feverThreshold < smoothKelvin) {
+    smoothKelvin = saltPepper * 5 - smoothKelvin * 4;
+    let v =
+      ((smoothKelvin - feverThreshold) * 255) /
+      (feverThreshold - checkThreshold);
+    r = 255;
+    g = Math.min(v * 0.5, 128);
+    b = g;
+  } else if (checkThreshold < smoothKelvin) {
+    smoothKelvin = saltPepper * 5 - smoothKelvin * 4;
+    let v =
+      ((smoothKelvin - checkThreshold) * 128) /
+      (feverThreshold - checkThreshold);
+    r = 100 + v;
+    g = 100 + v;
+    b = v;
+  } else {
+    let v = (smoothKelvin - roomThreshold) / (checkThreshold - roomThreshold);
+    v = Math.max(v, 0);
+    v = v * v * v * v * 192;
+    r = v;
+    g = v;
+    b = v;
+  }
+  return (r + g + b) / 3.0;
 }

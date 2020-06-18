@@ -24,7 +24,8 @@ import {
   buildSAT,
   ConvertCascadeXML,
   scanHaarParallel,
-  HaarCascade
+  HaarCascade,
+  buildSATGray
 } from "./haarcascade.js";
 import { Face, Hotspot } from "./face.js";
 
@@ -198,6 +199,7 @@ function LoadCascadeXML() {
 window.onload = async function() {
   loadXML();
   LoadCascadeXML();
+  console.log(GCascadeFace);
   toggleDebugGUI();
   let GCalibrateTemperatureCelsius = 37;
   let GCalibrateSnapshotValue = 0;
@@ -1344,7 +1346,35 @@ window.onload = async function() {
       performance.mark("oldhaar start");
 
       performance.mark("buildSat start");
-      const satData = buildSAT(smoothedData, width, height, sensorCorrection);
+      let feverThreshold = estimatedValueForTemperature(
+        GThreshold_fever - 0.5,
+        sensorCorrection
+      );
+      let checkThreshold = estimatedValueForTemperature(
+        GThreshold_check - 6.5,
+        sensorCorrection
+      );
+      //let roomThreshold = estimatedValueForTemperature(14.0, sensorCorrection);
+      let roomThreshold = 28804.0;
+
+      const satData = buildSATGray(
+        smoothedData,
+        saltPepperData,
+        width,
+        height,
+        sensorCorrection,
+        feverThreshold,
+        roomThreshold,
+        checkThreshold
+      );
+      //       10800: 28205096
+      // 10801: 28463760
+      // −258664
+      //
+      // 10800: 81795.5703125
+      // 10801: 81824.828125
+      // -29
+      const satDataT = buildSAT(smoothedData, width, height, sensorCorrection);
       performance.mark("buildSat end");
       performance.measure("build SAT", "buildSat start", "buildSat end");
       oldThermal = await scanHaarParallel(
@@ -1360,7 +1390,7 @@ window.onload = async function() {
 
     performance.mark("opencvhaar start");
 
-    const colorFrame = frameToColour(
+    const colorFrame = frameToGray(
       smoothedData,
       saltPepperData,
       sensorCorrection
@@ -1566,6 +1596,75 @@ window.onload = async function() {
     performance.mark("display end");
     performance.measure("display frame viz", "display start", "display end");
   }
+
+  function kelvinToRGB(
+    smoothKelvin: number,
+    saltPepper: number,
+    feverThreshold: number,
+    roomThreshold: number,
+    checkThreshold: number
+  ): number[] {
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    if (feverThreshold < smoothKelvin) {
+      smoothKelvin = saltPepper * 5 - smoothKelvin * 4;
+      let v =
+        ((smoothKelvin - feverThreshold) * 255) /
+        (feverThreshold - checkThreshold);
+      r = 255;
+      g = Math.min(v * 0.5, 128);
+      b = g;
+    } else if (checkThreshold < smoothKelvin) {
+      smoothKelvin = saltPepper * 5 - smoothKelvin * 4;
+      let v =
+        ((smoothKelvin - checkThreshold) * 128) /
+        (feverThreshold - checkThreshold);
+      r = 100 + v;
+      g = 100 + v;
+      b = v;
+    } else {
+      let v = (smoothKelvin - roomThreshold) / (checkThreshold - roomThreshold);
+      v = Math.max(v, 0);
+      v = v * v * v * v * 192;
+      r = v;
+      g = v;
+      b = v;
+    }
+    return [r, g, b];
+  }
+
+  function frameToGray(
+    smoothedData: Float32Array,
+    saltPepperData: Float32Array,
+    sensorCorrection: number
+  ): any {
+    let feverThreshold = estimatedValueForTemperature(
+      GThreshold_fever - 0.5,
+      sensorCorrection
+    );
+    let checkThreshold = estimatedValueForTemperature(
+      GThreshold_check - 6.5,
+      sensorCorrection
+    );
+    //let roomThreshold = estimatedValueForTemperature(14.0, sensorCorrection);
+    let roomThreshold = 28804.0;
+    let imgData = new Float32Array(frameWidth * frameHeight);
+
+    for (let index = 0; index < frameWidth * frameHeight; index++) {
+      let [r, g, b] = kelvinToRGB(
+        smoothedData[index],
+        saltPepperData[index],
+        feverThreshold,
+        roomThreshold,
+        checkThreshold
+      );
+
+      imgData[index] = Math.min(255, (r + g + b) / 3.0);
+    }
+    return imgData;
+  }
+
   function frameToColour(
     smoothedData: Float32Array,
     saltPepperData: Float32Array,
@@ -1584,32 +1683,14 @@ window.onload = async function() {
     let imgData = ctx.createImageData(frameWidth, frameHeight);
 
     for (let index = 0; index < frameWidth * frameHeight; index++) {
-      let f32Val = smoothedData[index];
-      let r = 0;
-      let g = 0;
-      let b = 0;
-      if (feverThreshold < f32Val) {
-        f32Val = saltPepperData[index] * 5 - f32Val * 4;
-        let v =
-          ((f32Val - feverThreshold) * 255) / (feverThreshold - checkThreshold);
-        r = 255;
-        g = Math.min(v * 0.5, 128);
-        b = g;
-      } else if (checkThreshold < f32Val) {
-        f32Val = saltPepperData[index] * 5 - f32Val * 4;
-        let v =
-          ((f32Val - checkThreshold) * 128) / (feverThreshold - checkThreshold);
-        r = 100 + v;
-        g = 100 + v;
-        b = v;
-      } else {
-        let v = (f32Val - roomThreshold) / (checkThreshold - roomThreshold);
-        v = Math.max(v, 0);
-        v = v * v * v * v * 192;
-        r = v;
-        g = v;
-        b = v;
-      }
+      let [r, g, b] = kelvinToRGB(
+        smoothedData[index],
+        saltPepperData[index],
+        feverThreshold,
+        roomThreshold,
+        checkThreshold
+      );
+
       imgData.data[index * 4 + 0] = r;
       imgData.data[index * 4 + 1] = g;
       imgData.data[index * 4 + 2] = b;
