@@ -3,7 +3,12 @@
 <head>
 	<title>feverscreener</title>
 	<script src="/static/js/NoSleep.js"></script>
-	<script>
+	<script
+		async
+		src="/static/js/opencv.js"
+		type="text/javascript"
+	></script>
+		<script>
 		// Switch out between bundled and ES6 module version depending on browser support.
 		if ('noModule' in HTMLScriptElement.prototype) {
 			// We support ES6 modules, which is handy during development, since it means we don't need to always run the
@@ -121,6 +126,9 @@
 				<img alt="Hot" id="thumb_hot" src="/static/img/thumbsdown.png">
 <!--				<img alt="Uncertain" id="thumb_question" src="/static/img/thumbsnone.png">-->
 				<img alt="Normal" id="thumb_normal" src="/static/img/thumbsup.png">
+			</div>
+			<div>
+				<img alt="template" id="template" src="/static/template2.png">
 			</div>
 			<div id="record-container">
 				<button id="record-btn" class="btn btn-primary btn-block mt-3">Record</a>
